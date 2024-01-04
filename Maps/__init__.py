@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 
+from plot import FrameVisualizer
+
 
 def transform_csv_to_json(sample_csv: pd.DataFrame):
     final_dic = {}

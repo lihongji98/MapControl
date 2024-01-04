@@ -13,7 +13,7 @@ def connect_db():
 
 
 class FrameVisualizer:
-    def __init__(self, matchMap="Maps/mapMetaData/de_inferno.png"):
+    def __init__(self, matchMap=r"D:\pycharm_projects\MapControl\Maps\mapMetaData\de_inferno.png"):
         self.matchID = None
         self.map = matchMap
         self.inferno_parameter = {"pos_x": -2087.0,
@@ -144,10 +144,10 @@ class FrameVisualizer:
         pos = self.frame_info_retrieve(round_num=0)
         self.plot(pos)
 
-    def draw_banana_block(self):
-        NAV_CSV = pd.read_csv("Maps/mapMetaData/area_info.csv")
+    def draw_block(self, plot_blocks):
+        NAV_CSV = pd.read_csv(r"D:\pycharm_projects\MapControl\Maps\mapMetaData\area_info.csv")
         NAV_CSV.areaName = NAV_CSV.areaName.fillna("")
-        NAV_CSV = NAV_CSV[NAV_CSV["areaName"] == "Banana"][["northWestX", "northWestY", "southEastX", "southEastY"]] # 205, 1625
+        NAV_CSV = NAV_CSV[NAV_CSV["areaId"].isin(plot_blocks)][["northWestX", "northWestY", "southEastX", "southEastY"]]
         NAV_CSV["northWestX"] = (NAV_CSV["northWestX"] - self.inferno_parameter["pos_x"]) / self.inferno_parameter[
             'scale']
         NAV_CSV["southEastX"] = (NAV_CSV["southEastX"] - self.inferno_parameter["pos_x"]) / self.inferno_parameter[
@@ -180,4 +180,3 @@ class FrameVisualizer:
 
 
 a = FrameVisualizer()
-a.draw_banana_block()

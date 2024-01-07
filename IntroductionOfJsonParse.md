@@ -105,8 +105,8 @@ Here list the attributes in __*frames*__ branch:
 
 ### __player information__
 ```
-data['gameRounds'][i]['frames'][j]['t']['player'][k]  # T side
-data['gameRounds'][i]['frames'][j]['ct']['player'][k]  # CT side              
+data['gameRounds'][i]['frames'][j]['t']['players'][k]  # T side
+data['gameRounds'][i]['frames'][j]['ct']['players'][k]  # CT side              
 ```
 >__Important information__:\
 > 'x', 'y', 'z', \

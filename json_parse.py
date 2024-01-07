@@ -72,7 +72,7 @@ class JsonParser:
             self.Rounds.append(temp_round_info)
 
         """
-        Fifth get the Frame information
+        Fifth get the Frag information
         """
         frag_candidate_attributes = ['seconds',
                                      'attackerName', 'attackerX', 'attackerY', 'attackerZ', 'attackerViewX',

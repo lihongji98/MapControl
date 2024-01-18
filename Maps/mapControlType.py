@@ -75,11 +75,7 @@ def get_team_tile(team_player_pos: List[PlayerPos], map_name: str):
         tile_dis_dict: Dict[int, float] = {}
         for area_id in area_json[map_name]:
             tile_center = _get_area_center(map_name, area_id)
-
-            distance = np.sqrt(
-                (x - tile_center.x) ** 2 + (y - tile_center.y) ** 2 + (z - tile_center.z) ** 2
-            )
-
+            distance = np.sqrt((x - tile_center.x) ** 2 + (y - tile_center.y) ** 2 + (z - tile_center.z) ** 2)
             tile_dis_dict[area_id] = distance
         tile_dis_closest: TileDistance = sorted(tile_dis_dict.items(), key=lambda tile_dist: tile_dist[1])[0]
         team_closest_block.append(tile_dis_closest[0])
@@ -108,8 +104,7 @@ def find_closest_neighbors(source_id: int, map_name: str, neighborNum: int):
             )
             tile_dis_dict[tile_id] = distance
 
-    tile_dis_closest: List[TileDistance] = sorted(tile_dis_dict.items(), key=lambda tile_dist: tile_dist[1])[
-                                           :neighborNum]
+    tile_dis_closest: List[TileDistance] = sorted(tile_dis_dict.items(), key=lambda tile_dist: tile_dist[1])[:neighborNum]
     closest_neighbors: List[TileID] = [tileDist[0] for tileDist in tile_dis_closest]
 
     return closest_neighbors
@@ -163,8 +158,7 @@ def _bfs(team_player_info: List[FramePlayerInfo], team_tile: List[int], max_dept
     return team_vision_collection
 
 
-def get_holistic_version_collection(_searcher_team_info: List[FramePlayerInfo],
-                                    _searchee_team_info: List[FramePlayerInfo]):
+def get_holistic_version_collection(_searcher_team_info: List[FramePlayerInfo], _searchee_team_info: List[FramePlayerInfo]):
     searcher_frame_player_pos: List[PlayerPos] = [info.player_pos for info in _searcher_team_info]
     searcher_team_tile: List[int] = get_team_tile(searcher_frame_player_pos, MAPINFO.mapName)
 
@@ -172,26 +166,20 @@ def get_holistic_version_collection(_searcher_team_info: List[FramePlayerInfo],
     searchee_team_tile: List[int] = get_team_tile(searchee_frame_player_pos, MAPINFO.mapName)
 
     # dead player's start tile is marked as -1
-    searcher_team_tile = [0 if _searcher_team_info[idx].player_hp == 0 else searcher_team_tile[idx] for idx, _ in
-                          enumerate(searcher_team_tile)]
-    searchee_team_tile = [0 if _searchee_team_info[idx].player_hp == 0 else searchee_team_tile[idx] for idx, _ in
-                          enumerate(searchee_team_tile)]
+    searcher_team_tile = [0 if _searcher_team_info[idx].player_hp == 0 else searcher_team_tile[idx] for idx, _ in enumerate(searcher_team_tile)]
+    searchee_team_tile = [0 if _searchee_team_info[idx].player_hp == 0 else searchee_team_tile[idx] for idx, _ in enumerate(searchee_team_tile)]
 
     searcher_team_vision_collection: TeamVisionCollection = _bfs(_searcher_team_info, searcher_team_tile, max_depth=10)
     searchee_team_vision_collection: TeamVisionCollection = _bfs(_searchee_team_info, searchee_team_tile, max_depth=10)
 
-    vision_collection = FrameTeamVisionCollection(searcher_team_vision_collection,
-                                                  searchee_team_vision_collection,
-                                                  searcher_team_tile,
-                                                  searchee_team_tile)
+    vision_collection = FrameTeamVisionCollection(searcher_team_vision_collection, searchee_team_vision_collection, searcher_team_tile, searchee_team_tile)
 
     return vision_collection
 
 
 def get_version_collection_details(_version_collection: List[OnePlayerVisionCollection]):
     _tile_ids = list(set([tile.tile_id for player_tiles_info in _version_collection for tile in player_tiles_info]))
-    _tile_depth = list(
-        set([tile.tile_depth for player_tiles_info in _version_collection for tile in player_tiles_info]))
+    _tile_depth = list(set([tile.tile_depth for player_tiles_info in _version_collection for tile in player_tiles_info]))
 
     return _tile_ids, _tile_depth
 
@@ -232,13 +220,9 @@ def retrieve_framePosInfo(matchID: ObjectId, roundNum: int, frame: int, team: Li
     team_player_hp = [one_player_info.hp for one_player_info in frame_player_dic]
 
     frame_player_info: List[FramePlayerInfo] = [FramePlayerInfo(name, pos, viewX, hp)
-                                                for name, pos, viewX, hp in zip(team_player_name,
-                                                                                team_player_pos,
-                                                                                team_player_viewX,
-                                                                                team_player_hp)]
+                                                for name, pos, viewX, hp in zip(team_player_name, team_player_pos, team_player_viewX, team_player_hp)]
 
-    return FrameTeamInfo(team_name,
-                         frame_player_info)
+    return FrameTeamInfo(team_name, frame_player_info)
 
 
 def get_roundFrame(matchID: ObjectId, roundNum: int):
@@ -291,10 +275,8 @@ MAPINFO.mapName = retrieve_match_info(currentMatchID)
 currentRound = 0
 
 # make_gif(currentMatchID, currentRound)
-searcher_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound,
-                                                               frame=55, team="team1")
-searchee_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound,
-                                                               frame=55, team="team2")
+searcher_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=55, team="team1")
+searchee_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=55, team="team2")
 
 searcher_team_info: List[FramePlayerInfo] = searcher_team_frame_pos.team_player_info
 searchee_team_info: List[FramePlayerInfo] = searchee_team_frame_pos.team_player_info

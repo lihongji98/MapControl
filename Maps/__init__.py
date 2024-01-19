@@ -58,7 +58,7 @@ def create_nav_graphs(nav):
                     ]
                 )
             with open(
-                    "mapMetaData/de_inferno.txt", encoding="utf8"
+                    "./mapMetaData/de_inferno.txt", encoding="utf8"
             ) as edge_list:
                 edge_list_lines = edge_list.readlines()
             for line in edge_list_lines:
@@ -85,7 +85,7 @@ def graph_to_tile_neighbors(neighbor_pairs):
     return tile_to_neighbors
 
 
-AREA_CSV = pd.read_csv("mapMetaData/area_info.csv")
+AREA_CSV = pd.read_csv(r"./mapMetaData/area_info.csv")
 AREA_CSV.areaName = AREA_CSV.areaName.fillna("")
 area_json = transform_csv_to_json(AREA_CSV)
 mapGraph = create_nav_graphs(area_json)

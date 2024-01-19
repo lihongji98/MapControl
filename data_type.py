@@ -45,19 +45,25 @@ class FrameTeamInfo:
 
 
 @dataclass
-class BfsTileInfo:
+class TeamStateInfo:
+    searcher_team_info: List[FramePlayerInfo]
+    searchee_team_info: List[FramePlayerInfo]
+
+
+@dataclass
+class BFSTileInfo:
     """
     a dataclass containing tile's basic frame information: tile_id, tile_depth
     """
     tile_id: int
-    tile_depth: int
+    tile_depth: float
 
 
 TileDistance: TypeAlias = tuple[int, float]
 
 TileID: TypeAlias = int
 
-OnePlayerVisionCollection: TypeAlias = List[BfsTileInfo]
+OnePlayerVisionCollection: TypeAlias = List[BFSTileInfo]
 TeamVisionCollection: TypeAlias = List[OnePlayerVisionCollection]
 
 
@@ -73,3 +79,10 @@ class FrameTeamVisionCollection:
 
     searcher_team_tile: List[TileID]
     searchee_team_tile: List[TileID]
+
+
+@dataclass
+class AreaCenterCoordinate:
+    x: float
+    y: float
+    z: float

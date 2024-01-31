@@ -86,3 +86,11 @@ class AreaCenterCoordinate:
     x: float
     y: float
     z: float
+
+
+@dataclass
+class FourAreaTiles:
+    TSpawn: int
+    CTSpawn: int
+    BombsiteA: int
+    BombsiteB: int

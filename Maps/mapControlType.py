@@ -1,14 +1,20 @@
 from collections import deque
+from io import BytesIO
 
+import imageio
 import mongoengine as mongo
 import numpy as np
 from bson import ObjectId
 from typing import Literal, List, Dict
 
 from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 import database
-from Maps.utils import get_vision_collection_details
+from Maps.utils import (get_vision_collection_details,
+                        get_site_center,
+                        least_distance_between_two_nodes,
+                        decay_coef)
 from data_type import (
     PlayerPos,
     TilePos,
@@ -18,7 +24,10 @@ from data_type import (
     TileID,
     BFSTileInfo,
     OnePlayerVisionCollection,
-    TeamVisionCollection, FrameTeamVisionCollection, TeamStateInfo)
+    TeamVisionCollection,
+    FrameTeamVisionCollection,
+    TeamStateInfo,
+    AreaCenterCoordinate, FourAreaTiles)
 
 from Maps import area_json, neighbors_dict, mapGraph
 from Maps.plot import FrameVisualizer
@@ -46,7 +55,7 @@ def _position_scaling(x: float, y: float, z: float, data: Literal["player", "til
     return PlayerPos(scaled_x, scaled_y, scaled_z) if data == "player" else TilePos(scaled_x, scaled_y, scaled_z)
 
 
-def _get_area_center(map_name: str, tile_id: int):
+def _get_tile_center(map_name: str, tile_id: int):
     """
     :param map_name: str
     :param tile_id: int
@@ -58,6 +67,23 @@ def _get_area_center(map_name: str, tile_id: int):
     tile_center: TilePos = _position_scaling(tile_x, tile_y, tile_z, "tile")
 
     return tile_center
+
+
+def find_closest_tile(center_coordinate: AreaCenterCoordinate, map_name: str):
+    tile_dis_dict: Dict[int, float] = {}
+    for tile_id in area_json[map_name]:
+        tile_center: TilePos = _get_tile_center(map_name, tile_id)
+        distance = np.sqrt(
+            (center_coordinate.x - tile_center.x) ** 2
+            + (center_coordinate.y - tile_center.y) ** 2
+            + (center_coordinate.z - tile_center.z) ** 2
+        )
+        tile_dis_dict[tile_id] = distance
+
+    tile_dis_closest: TileDistance = sorted(tile_dis_dict.items(), key=lambda tile_dist: tile_dist[1])[0]
+    closest_tile: TileID = tile_dis_closest[0]
+
+    return closest_tile
 
 
 def get_team_tile(team_player_pos: List[PlayerPos], map_name: str):
@@ -72,7 +98,7 @@ def get_team_tile(team_player_pos: List[PlayerPos], map_name: str):
         x, y, z = player_pos.x, player_pos.y, player_pos.z
         tile_dis_dict: Dict[int, float] = {}
         for area_id in area_json[map_name]:
-            tile_center = _get_area_center(map_name, area_id)
+            tile_center = _get_tile_center(map_name, area_id)
             distance = np.sqrt((x - tile_center.x) ** 2 + (y - tile_center.y) ** 2 + (z - tile_center.z) ** 2)
             tile_dis_dict[area_id] = distance
         tile_dis_closest: TileDistance = sorted(tile_dis_dict.items(), key=lambda tile_dist: tile_dist[1])[0]
@@ -89,12 +115,12 @@ def find_closest_neighbors(source_id: int, map_name: str, neighborNum: int):
     :param neighborNum: the number of neighbors to the source tile
     :return: A list containing the closest neighbors' ids.
     """
-    source_tile_center: TilePos = _get_area_center(map_name, source_id)
+    source_tile_center: TilePos = _get_tile_center(map_name, source_id)
 
     tile_dis_dict: Dict[int, float] = {}
     for tile_id in area_json[map_name]:
         if tile_id != source_id:
-            tile_center: TilePos = _get_area_center(map_name, tile_id)
+            tile_center: TilePos = _get_tile_center(map_name, tile_id)
             distance = np.sqrt(
                 (source_tile_center.x - tile_center.x) ** 2
                 + (source_tile_center.y - tile_center.y) ** 2
@@ -109,7 +135,7 @@ def find_closest_neighbors(source_id: int, map_name: str, neighborNum: int):
 
 
 def _is_tile_in_view(player_pos: PlayerPos, viewX: float, search_tile: TileID):
-    center: TilePos = _get_area_center(MAPINFO.mapName, search_tile)
+    center: TilePos = _get_tile_center(MAPINFO.mapName, search_tile)
     to_check_tile_vec = np.array([center.x - player_pos.x, center.y - player_pos.y])
 
     normal_vec = [np.cos(np.radians(viewX)), np.sin(np.radians(viewX))]
@@ -167,8 +193,8 @@ def get_holistic_version_collection(_searcher_team_info: List[FramePlayerInfo], 
     searcher_team_tile = [0 if _searcher_team_info[idx].player_hp == 0 else searcher_team_tile[idx] for idx, _ in enumerate(searcher_team_tile)]
     searchee_team_tile = [0 if _searchee_team_info[idx].player_hp == 0 else searchee_team_tile[idx] for idx, _ in enumerate(searchee_team_tile)]
 
-    searcher_team_vision_collection: TeamVisionCollection = _bfs(_searcher_team_info, searcher_team_tile, max_depth=10)
-    searchee_team_vision_collection: TeamVisionCollection = _bfs(_searchee_team_info, searchee_team_tile, max_depth=10)
+    searcher_team_vision_collection: TeamVisionCollection = _bfs(_searcher_team_info, searcher_team_tile, max_depth=8)
+    searchee_team_vision_collection: TeamVisionCollection = _bfs(_searchee_team_info, searchee_team_tile, max_depth=8)
 
     _vision_collection = FrameTeamVisionCollection(searcher_team_vision_collection, searchee_team_vision_collection, searcher_team_tile, searchee_team_tile)
 
@@ -184,7 +210,7 @@ def get_observed_opponent_version_collection(_vision_collection: FrameTeamVision
     observed_searchee_vision_collection: List[List[BFSTileInfo]] = [[] for _ in range(5)]
     for idx, player_tile_id in enumerate(searchee_team_tiles):
         if (player_tile_id != 0) and (player_tile_id in _searcher_tile_ids):
-            bfs_searchee_player = _bfs(_searchee_team_info, searchee_team_tiles, max_depth=10)[idx]
+            bfs_searchee_player = _bfs(_searchee_team_info, searchee_team_tiles, max_depth=8)[idx]
             bfs_searchee_tiles = [tiles_info.tile_id for tiles_info in bfs_searchee_player]
             bfs_searchee_depth = [tiles_info.tile_depth for tiles_info in bfs_searchee_player]
             for tile_id, tile_depth in zip(bfs_searchee_tiles, bfs_searchee_depth):
@@ -200,29 +226,78 @@ def get_frame_vision_collection(_searcher_team_info: List[FramePlayerInfo], _sea
     return _vision_collection
 
 
-def update_map_control(_tile_Dict: Dict[int, float], _vision_collection: FrameTeamVisionCollection):
+def get_area_tile_id():
+    B_site_center: TileID = find_closest_tile(get_site_center('BombsiteB'), MAPINFO.mapName)
+    A_site_center: TileID = find_closest_tile(get_site_center('BombsiteA'), MAPINFO.mapName)
+    T_center: TileID = find_closest_tile(get_site_center('TSpawn'), MAPINFO.mapName)
+    CT_center: TileID = find_closest_tile(get_site_center('CTSpawn'), MAPINFO.mapName)
+    FourAreaTile = FourAreaTiles(T_center, CT_center, A_site_center, B_site_center)
+
+    return FourAreaTile
+
+
+def update_map_control(_control_value_dict: Dict[int, float], _vision_collection: FrameTeamVisionCollection):
+    # update players' visible tiles
+    visible_tiles: set[TileID] = set()
+    seacher_tiles_info = _vision_collection.searcher_vision_collection
+    for player_tile_info in seacher_tiles_info:
+        for tile_info in player_tile_info:
+            if tile_info.tile_depth > 0.2: visible_tiles.add(tile_info.tile_id)
+
     searcher_team_tiles = _vision_collection.searcher_team_tile
     for tile_id in searcher_team_tiles:
         if tile_id != 0:
-            _tile_Dict[tile_id] += 1.0
+            _control_value_dict[tile_id] += 1.0
     for player_vision_collection in _vision_collection.searcher_vision_collection:
         for BFS_tile_info in player_vision_collection:
             tile_id = BFS_tile_info.tile_id
             tile_depth = BFS_tile_info.tile_depth
-            _tile_Dict[tile_id] += tile_depth
+            _control_value_dict[tile_id] += tile_depth
 
     searchee_team_tiles = _vision_collection.searchee_team_tile
     for idx, tile_id in enumerate(searchee_team_tiles):
         if tile_id != 0 and len(_vision_collection.searchee_vision_collection[idx]) != 0:
-            _tile_Dict[tile_id] -= 1.0
+            _control_value_dict[tile_id] -= 1.0
     for player_vision_collection in _vision_collection.searchee_vision_collection:
         for BFS_tile_info in player_vision_collection:
             tile_id = BFS_tile_info.tile_id
             tile_depth = BFS_tile_info.tile_depth
-            _tile_Dict[tile_id] -= tile_depth
+            _control_value_dict[tile_id] -= tile_depth
 
-    for key in _tile_Dict.keys():
-        _tile_Dict[key] = np.clip(_tile_Dict[key], -1, 1)
+    for key in _control_value_dict.keys():
+        _control_value_dict[key] = np.clip(_control_value_dict[key], -1, 1)
+
+    # update players' invisible tiles
+    invisible_tiles: List[TileID] = [tile_id for tile_id in _control_value_dict.keys() if tile_id not in visible_tiles]
+
+    new_neighbors_dict = neighbors_dict.copy()
+    for invisible_visible_node in visible_tiles:
+        del new_neighbors_dict[invisible_visible_node]
+
+    T_tile, CT_tile = CT_T_A_B_tile.TSpawn, CT_T_A_B_tile.CTSpawn
+    A_tile, B_tile = CT_T_A_B_tile.BombsiteA, CT_T_A_B_tile.BombsiteB
+
+    decay_dict: Dict[int, float] = {idx: 0.00 for idx in _control_value_dict.keys()}
+
+    for current_tile in invisible_tiles:
+        if current_tile not in [T_tile, CT_tile, A_tile, B_tile]:
+            T_dis = least_distance_between_two_nodes(new_neighbors_dict, current_tile, T_tile)
+            CT_dis = least_distance_between_two_nodes(new_neighbors_dict, current_tile, CT_tile)
+            A_dis = least_distance_between_two_nodes(new_neighbors_dict, current_tile, A_tile)
+            B_dis = least_distance_between_two_nodes(new_neighbors_dict, current_tile, B_tile)
+            current_tile_decay = decay_coef(T_dis, CT_dis, A_dis, B_dis)
+            decay_dict[current_tile] = current_tile_decay
+
+    for visible_tile in visible_tiles:
+        decay_dict[visible_tile] = 0
+
+    for key in _control_value_dict.keys():
+        current_value: float = _control_value_dict[key]
+        decay_coefficient: float = decay_dict[key]
+        if decay_coefficient < 0:
+            _control_value_dict[key] = np.clip(current_value * 0.85, -1, 1)
+
+    print(set(_control_value_dict.values()))
 
 
 def retrieve_framePosInfo(matchID: ObjectId, roundNum: int, frame: int, team: Literal["team1", "team2"]):
@@ -293,41 +368,30 @@ currentMatchID = ObjectId("656c9a14a038bfba3be1021d")
 MAPINFO.mapName = retrieve_match_info(currentMatchID)
 currentRound = 0
 
-# make_gif(currentMatchID, currentRound)
-searcher_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=35, team="team2")
-searchee_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=35, team="team1")
-
-searcher_team_info: List[FramePlayerInfo] = searcher_team_frame_pos.team_player_info
-searchee_team_info: List[FramePlayerInfo] = searchee_team_frame_pos.team_player_info
-team_state_info = TeamStateInfo(searcher_team_info, searchee_team_info)  # contains two teams' player information: List[name, position, viewX, hp]
-
-vision_collection: FrameTeamVisionCollection = get_frame_vision_collection(team_state_info.searcher_team_info, team_state_info.searchee_team_info)
-
+CT_T_A_B_tile = get_area_tile_id()
 total_tile_ids: List[int] = mapGraph['de_inferno'].nodes
-tile_Dict: Dict[int, float] = {idx: 0.00 for idx in total_tile_ids}
+control_value_dict: Dict[int, float] = {idx: 0.00 for idx in total_tile_ids}
 
-# fig = visualizer.draw_block(team_state_info, vision_collection)
-# plt.show()
+roundTotalFrame = get_roundFrame(currentMatchID, currentRound)
+for i in tqdm(range(roundTotalFrame)):
+    # make_gif(currentMatchID, currentRound)
+    searcher_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=i, team="team2")
+    searchee_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound, frame=i, team="team1")
 
-update_map_control(tile_Dict, vision_collection)
-visualizer.show_map_control(team_state_info, tile_Dict)
-plt.show()
-# roundTotalFrame = get_roundFrame(currentMatchID, currentRound)
-# for i in range(roundTotalFrame):
-#     searcher_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound,
-#                                                                    frame=i, team="team1")
-#     searchee_team_frame_pos: FrameTeamInfo = retrieve_framePosInfo(matchID=currentMatchID, roundNum=currentRound,
-#                                                                    frame=i, team="team2")
-#
-#     searcher_team_info: List[FramePlayerInfo] = searcher_team_frame_pos.team_player_info
-#     searchee_team_info: List[FramePlayerInfo] = searchee_team_frame_pos.team_player_info
-#
-#     version_collection: FrameTeamVisionCollection = get_version_collection(searcher_team_info, searchee_team_info)
-#
-#     tile_ids, depth = get_version_collection_info(version_collection.searcher_vision_collection)
-#
-#     # fig = visualizer.draw_block(tile_ids, searcher_team_info)
-#     # plt.show()
-#
-#     parse_version_collection(version_collection, searchee_team_info)
-#     print(f"{i} frame")
+    searcher_team_info: List[FramePlayerInfo] = searcher_team_frame_pos.team_player_info
+    searchee_team_info: List[FramePlayerInfo] = searchee_team_frame_pos.team_player_info
+    team_state_info = TeamStateInfo(searcher_team_info, searchee_team_info)  # contains two teams' player information: List[name, position, viewX, hp]
+
+    vision_collection: FrameTeamVisionCollection = get_frame_vision_collection(team_state_info.searcher_team_info, team_state_info.searchee_team_info)
+
+    update_map_control(control_value_dict, vision_collection)
+
+    fig = visualizer.show_map_control(team_state_info, control_value_dict)
+    # plt.show()
+    img_data = BytesIO()
+    fig.savefig(img_data, format='png')
+    img_data.seek(0)
+
+    frames.append(imageio.v2.imread(img_data))
+    plt.close()
+imageio.mimsave(output_path, frames, duration=100)

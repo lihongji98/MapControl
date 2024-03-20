@@ -1,3 +1,5 @@
+![Visualization_DEMO]([https://i.imgur.com/Example.gif](https://github.com/lihongji98/MapControl/blob/master/demo.gif))
+
 ### TODO:
 
 Map Control

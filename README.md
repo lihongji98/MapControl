@@ -1,6 +1,7 @@
 ### Visualization Demo
 > This is the first pistol round of the final, and map is de_inferno.  
-![demo](https://github.com/lihongji98/MapControl/assets/59786439/f0b26828-4641-4887-8a4e-3c214da927fd)
+![demo](https://github.com/lihongji98/MapControl/assets/59786439/8c89603f-34f6-48f5-9f6d-d583a943f009)
+
 
 ### TODO:
 

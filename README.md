@@ -1,4 +1,4 @@
-![Visualization_DEMO]([https://i.imgur.com/Example.gif](https://github.com/lihongji98/MapControl/blob/master/demo.gif))
+![demo](https://github.com/lihongji98/MapControl/assets/59786439/f0b26828-4641-4887-8a4e-3c214da927fd)
 
 ### TODO:
 
